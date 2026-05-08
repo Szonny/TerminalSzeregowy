@@ -4,7 +4,12 @@
 #include <winbase.h>
 
 /*
-https://web.archive.org/web/20180127160838/http://bd.eduweb.hhs.nl/micprg/pdf/serial-win.pdf
+DODAĆ ZAPIS USTAWIEN DO PLIKU
+    //Zaawansowane funkcje - DTR,przerwania
+    //EscapeCommFunction (HANDLE, DWORD); CLRDTR- usuwa DTR, SETDTR- wysyla DTR, SETRTS, CLRRTS, SETBREAK, CLRBREAK
+    //FlushFileBuffers(HANDLE) - czyszczenie bufforow
+    //Ping, przerwania - mechanizm Eventów i Callbacki
+
 KONTROLA KOMUNIKACJ NA PORCIE ZNAKOWYM
 1. Konfiguracja ³¹cza do komunikacji
     1.1. Wybór portu (po³¹czony ze sprawdzeniem obecnoœci portu) - OB
@@ -462,8 +467,5 @@ int main( int argc, char** argv)
             nasluchujWiadomosci(nrPortu,dcbParamSzereg, timeouts);
     }
     return 0;
-    //Zaawansowane funkcje - DTR,przerwania
-    //EscapeCommFunction (HANDLE, DWORD); CLRDTR- usuwa DTR, SETDTR- wysyla DTR, SETRTS, CLRRTS, SETBREAK, CLRBREAK
-    //FlushFileBuffers(HANDLE) - czyszczenie bufforow
-    //Ping, przerwania - mechanizm Eventów i Callbacki
+
 }
