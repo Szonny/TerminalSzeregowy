@@ -2,6 +2,10 @@
 #include <iostream>
 #include <sstream>
 #include <winbase.h>
+#include <fstream>
+
+#define PLIK_USTAWIEN_TRANSMISJI "TransConfig.config"
+#define PLIK_USTAWIEN_TIMEOUTOW "TimeOutConfig.config"
 
 /*
 DODAĆ ZAPIS USTAWIEN DO PLIKU
@@ -35,6 +39,94 @@ KONTROLA KOMUNIKACJ NA PORCIE ZNAKOWYM
         Odbiór: Prezentacja odebranych znaków alfanumerycznych w oknie „Odbiór”.
 */
 
+int zapiszUstawieniaWPliku(std::string plik, DCB param)
+{
+    std::ofstream plikWy(PLIK_USTAWIEN_TRANSMISJI);
+
+     if(!plikWy.is_open())
+        return 1;
+
+    plikWy<<param.BaudRate<<'\n';
+    plikWy<<param.ByteSize<<'\n';
+    plikWy<<param.Parity<<'\n';
+    plikWy<<param.StopBits<<'\n';
+
+    plikWy.close();
+    return 0;
+}
+
+int zapiszTimeoutyWPliku(std::string plik, COMMTIMEOUTS tim)
+{
+    std::ofstream plikWy(PLIK_USTAWIEN_TIMEOUTOW);
+
+    if(!plikWy.is_open())
+        return 1;
+
+    plikWy<<tim.ReadIntervalTimeout<<'\n';
+    plikWy<<tim.ReadIntervalTimeout<<'\n';
+    plikWy<<tim.ReadTotalTimeoutConstant<<'\n';
+    plikWy<<tim.ReadTotalTimeoutMultiplier<<'\n';
+    plikWy<<tim.WriteTotalTimeoutConstant<<'\n';
+    plikWy<<tim.WriteTotalTimeoutMultiplier<<'\n';
+
+    plikWy.close();
+    return 0;
+}
+
+int wczytajUstawienia(DCB &param, COMMTIMEOUTS &tim)
+{
+    std::ifstream plikU(PLIK_USTAWIEN_TRANSMISJI);
+    std::ifstream plikT(PLIK_USTAWIEN_TIMEOUTOW);
+
+    if(!plikT.is_open() || !plikU.is_open())
+    {
+        return 1;
+    }
+
+    plikU>>param.BaudRate;
+    plikU>>param.ByteSize;
+    plikU>>param.Parity;
+    plikU>>param.StopBits;
+    plikU.close();
+
+    plikT>>tim.ReadIntervalTimeout;
+    plikT>>tim.ReadIntervalTimeout;
+    plikT>>tim.ReadTotalTimeoutConstant;
+    plikT>>tim.ReadTotalTimeoutMultiplier;
+    plikT>>tim.WriteTotalTimeoutConstant;
+    plikT>>tim.WriteTotalTimeoutMultiplier;
+    plikT.close();
+
+    return 0;
+}
+
+std::string wczytajLinieZPliku(std::string plik, int nrLini)
+{
+    std::ifstream plikW(plik);
+    std::string wiadomosc;
+    for(int i=1; i<nrLini; i++)
+    {
+        std::string niewazne;
+        std::getline(plikW,niewazne);
+    }
+    plikW>>wiadomosc;
+    plikW.close();
+    return wiadomosc;
+}
+
+void wyswietlBlad()
+{
+    char ostatniBlad[1024];
+    std::cout<<"\n\n\n/********POWAZNY_BLAD*******\n";
+    std::cout<<"Kod bledu: "<<GetLastError()<<'\n';
+    FormatMessage(
+            FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,NULL,
+            GetLastError(),MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+            ostatniBlad,1024,NULL)<<'\n';
+    std::cout<<ostatniBlad<<'\n';
+    std::cout<<"\\***************************\n\n\n";
+}
+
 int pobierzInt()
 {
     std::string wyb;
@@ -42,8 +134,9 @@ int pobierzInt()
     return atoi(wyb.c_str());
 }
 
-int pobierzIntWPrzedziale(int min, int max)
+int pobierzIntWPrzedziale(unsigned int min,unsigned int max)
 {
+    std::cout<<"Podaj porzadana warosc: ";
     int liczba = pobierzInt();
     while(liczba < min || liczba > max){
         std::cout<<"\n*Podana wartosc jest niepoprawna, sproboj jeszcze raz.*\n";
@@ -226,21 +319,39 @@ int pobierzLbitowStop(int obecna)
     return lBitowS;
 }
 
+void wyswietlObecneUstawienia(DCB dcb)
+{
+        std::cout<<"Obecnie ustawiona predkosc transmisji: "<<(int)dcb.BaudRate<<" i format znaku: "<<(float)dcb.ByteSize;
+        if(dcb.Parity==EVENPARITY) std::cout<<'E';
+        else if(dcb.Parity==NOPARITY) std::cout<<'N';
+        else if(dcb.Parity==ODDPARITY) std::cout<<'O';
+        else std::cout<<'-';
+
+        if(dcb.StopBits== ONESTOPBIT)
+            std::cout<<1<<'\n';
+        else if(dcb.StopBits== ONE5STOPBITS)
+            std::cout<<5<<'\n';
+        else    std::cout<<(int)dcb.StopBits<<'\n';
+}
+
+void wyswietlObecneTimeouty(COMMTIMEOUTS timeouts)
+{
+     std::cout<<"1-"<<timeouts.ReadIntervalTimeout<<"ms | 2-"<<timeouts.ReadTotalTimeoutConstant;
+        std::cout<<"ms | 3-"<<timeouts.ReadTotalTimeoutMultiplier<<"ms | 4-"<<timeouts.WriteTotalTimeoutConstant;
+        std::cout<<"ms | 5-"<<timeouts.WriteTotalTimeoutMultiplier<<"ms\n";
+}
+
 DCB ustawieniaTransmisji(DCB dcbParam)
 {
     bool wPodmenu=true;
 
+    std::cout<<"\n\n\n/********************************\n";
     std::cout<<"Witaj w podmenu ustawien transmisji. \n";
     while (wPodmenu)
     {
         std::cout<<"Wybierz ktory parametr transmisji chcesz ustawic.\n \
-        0-Zapisz ustawienia i wroc | 1-Szybkosc Transimsji(Baudrate) | 2 - Ilosc bitow danych | 3 - Bit (nie)parzystosci | 4 - Dlugosc bitu stopu\n";
-        std::cout<<"Obecnie ustawione: "<<(int)dcbParam.BaudRate<<" i format: "<<(float)dcbParam.ByteSize;
-        if(dcbParam.Parity==EVENPARITY) std::cout<<'E';
-        else if(dcbParam.Parity==NOPARITY) std::cout<<'N';
-        else if(dcbParam.Parity==ODDPARITY) std::cout<<'O';
-        else std::cout<<'-';
-        std::cout<<(int)dcbParam.StopBits<<'\n';
+        0-Zapisz ustawienia i wroc | 1-Szybkosc Transimsji(Baudrate) | 2 - Ilosc bitow danych \n\t| 3 - Bit (nie)parzystosci | 4 - Dlugosc bitu stopu\n";
+        wyswietlObecneUstawienia(dcbParam);
 
         char wyb;
         std::cin>>wyb;
@@ -266,6 +377,7 @@ DCB ustawieniaTransmisji(DCB dcbParam)
         }
     }
 
+    zapiszUstawieniaWPliku(PLIK_USTAWIEN_TRANSMISJI, dcbParam);
 
     return dcbParam;
 }
@@ -286,13 +398,8 @@ HANDLE utworzPort(int nrPortu)
     {
         if(GetLastError() == ERROR_FILE_NOT_FOUND)
             std::cout<<"BLAD: Nie znaleziono portu szeregowego. "<<port<<"\n";
-        else std::cout<<"BLAD: Inny blad niz nie znalezienie portu szeregowego.\n";
 
-        char ostatniBlad[1024];
-        std::cout<<"Windows mowi: \n"<<FormatMessage(
-            FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,NULL,
-            GetLastError(),MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-            ostatniBlad,1024,NULL)<<'\n';
+        wyswietlBlad();
         return 0;
     }
 
@@ -325,7 +432,7 @@ int ustawNrPortu(int nrPortu)
 {
     wyswietlDostepnePorty();
 
-    std::cout<<"Obecny numer portu to: "<<nrPortu<<"\nPodaj nowy numer portu: ";
+    std::cout<<"Obecny numer portu to: "<<nrPortu<<"\nPodaj nowy numer portu (SAM NUMER np. 10): ";
 
     nrPortu = pobierzInt();
     HANDLE test = utworzPort(nrPortu);
@@ -343,6 +450,7 @@ void wysylanieWiadomosci(int nrPortu, DCB parametry ,COMMTIMEOUTS timeouts)
     if(!SetCommState(hSzeregowy, &parametry))
     {
         std::cout<<"BLAD: Nie udalo sie ustawic parametrow poru szeregowego.\n";
+        wyswietlBlad();
     }
 
     if(!SetCommTimeouts(hSzeregowy, &timeouts))
@@ -360,8 +468,10 @@ void wysylanieWiadomosci(int nrPortu, DCB parametry ,COMMTIMEOUTS timeouts)
 
     //Czy cstr ma ta sama dlugosc co str.length? -> znak /0 uwzgledniony?
     if(!WriteFile(hSzeregowy,wiadomosc.str().c_str(), wiadomosc.str().length(), &odczytane, NULL))     //WriteFile robi zapis
-            std::cout<<"BLAD: Nie udalo sie wyslac wiadomosci\n";
-
+    {
+        std::cout<<"BLAD: Nie udalo sie wyslac wiadomosci\n";
+        wyswietlBlad();
+    }
     CloseHandle(hSzeregowy);
 }
 
@@ -373,6 +483,15 @@ void nasluchujWiadomosci(int nrPortu, DCB parametry ,COMMTIMEOUTS timeouts)
 
     char buff[1000];
     DWORD odczytane=0;
+
+    if(!SetCommState(hSzeregowy, &parametry))
+    {
+        std::cout<<"BLAD: Nie udalo sie ustawic parametrow poru szeregowego.\n";
+        wyswietlBlad();
+    }
+
+    if(!SetCommTimeouts(hSzeregowy, &timeouts))
+        std::cout<<" \nBLAD: Nie udalo sie ustawic domyslnych limitow czasowych\n";
 
     if(!ReadFile(hSzeregowy,buff,1000, &odczytane, NULL))     //WriteFile robi zapis
     {
@@ -386,21 +505,19 @@ void nasluchujWiadomosci(int nrPortu, DCB parametry ,COMMTIMEOUTS timeouts)
 
 COMMTIMEOUTS ustawieniaCzasowOczekiwania(COMMTIMEOUTS timeouts)
 {
-
     bool wPodmenu=true;
 
-    //MAXDWORD zwraca wartosci od razu
+    std::cout<<"\n\n\n/********************************\n";
     std::cout<<"Witaj w podmenu ustawien maksymalnych czasow oczekiwania podczas transmisji. \n";
     while (wPodmenu)
     {
-        std::cout<<"Wybierz ktory parametr transmisji chcesz ustawic.\n \
-        0-Zapisz ustawienia i wroc | 1-Czas miedzy odczytanymi znakami | \
-        2 - Czas oczekiania na odczyt przed porzuceniem transimsji | \
-        3 - Czas oczekiwania na kazdy odczytany bajt | 4 - Czas oczekiwania na operacja zapisu \
-        5 - czsa oczekiwania na każdy zapisywany bajt??\n";
-        std::cout<<"Obecnie ustawione: 1-"<<timeouts.ReadIntervalTimeout<<" | 2-"<<timeouts.ReadTotalTimeoutConstant;
-        std::cout<<" | 3-"<<timeouts.ReadTotalTimeoutMultiplier<<" | 4-"<<timeouts.WriteTotalTimeoutConstant;
-        std::cout<<" | 5-"<<timeouts.WriteTotalTimeoutMultiplier<<'\n';
+        std::cout<<"Wybierz ktory parametr transmisji chcesz ustawic.\n"
+        <<"0-Zapisz ustawienia i wroc | 1-Czas miedzy odczytanymi znakami |"
+        <<"2 - Czas oczekiania na odczyt przed porzuceniem transimsji |"
+        <<"3 - Czas oczekiwania na kazdy odczytany bajt | 4 - Czas oczekiwania na operacja zapisu"
+        <<"5 - Czas oczekiwania na kazdy zapisywany bajt??\n";
+        std::cout<<"Obecnie ustawione: ";
+        wyswietlObecneTimeouty(timeouts);
         char wyb;
         std::cin>>wyb;
 
@@ -427,6 +544,8 @@ COMMTIMEOUTS ustawieniaCzasowOczekiwania(COMMTIMEOUTS timeouts)
         }
     }
 
+    zapiszTimeoutyWPliku(PLIK_USTAWIEN_TIMEOUTOW,timeouts);
+
     return timeouts;
 }
 
@@ -436,20 +555,35 @@ int main( int argc, char** argv)
     COMMTIMEOUTS timeouts = {0};
     int nrPortu=1;
 
-    timeouts.ReadIntervalTimeout=MAXDWORD; //maks czas miedzy znakami.     milisekundy
-    timeouts.ReadTotalTimeoutConstant=MAXDWORD; //jak dlugo czekac przed porzuceniem
-    timeouts.ReadTotalTimeoutMultiplier=MAXDWORD; //Czas oczekiwania na kazdy bajt operacji
-    timeouts.WriteTotalTimeoutConstant=MAXDWORD;  //dla zapisu, ale to samo
-    timeouts.WriteTotalTimeoutMultiplier=MAXDWORD;
+    if( wczytajUstawienia(dcbParamSzereg, timeouts))
+    {
+        std::cout<<"\nNie znaleziono poprzednich ustawien!\n";
+
+        dcbParamSzereg.BaudRate=CBR_9600;
+        dcbParamSzereg.ByteSize=8;
+        dcbParamSzereg.Parity=NOPARITY;
+        dcbParamSzereg.StopBits=ONESTOPBIT;
+        timeouts.ReadIntervalTimeout=1; //maks czas miedzy znakami.     milisekundy
+        timeouts.ReadTotalTimeoutConstant=1; //jak dlugo czekac przed porzuceniem
+        timeouts.ReadTotalTimeoutMultiplier=1; //Czas oczekiwania na kazdy bajt operacji
+        timeouts.WriteTotalTimeoutConstant=1;  //dla zapisu, ale to samo
+        timeouts.WriteTotalTimeoutMultiplier=1;
+    }
 
     std::cout<<"Witaj w epickim terminalu\n";
-    std::cout<<"Obecny numer portu: COM"<<nrPortu<<'\n';
+
     bool maDzialac=true;
     while(maDzialac)
     {
+        std::cout<<"\n\n\n/********************************\n";
+        std::cout<<"Obecny numer portu: COM"<<nrPortu<<'\n';
+        wyswietlObecneUstawienia(dcbParamSzereg);
+        std::cout<<"Obecne timeouty: "; wyswietlObecneTimeouty(timeouts);
+
         char wyb;
         std::cout<<"\nWybierz co chcesz zrobic: \n \t 0-wyjsc z programu 1-Ustawic port 2-Ustawienia transmisji \n \
-        3-Ustawienia czasow oczekiwania 4-wyslac wiadomosc 5-odebrac wiadomosc\n";
+        3-Ustawienia czasow oczekiwania 4-wyslac wiadomosc 5-odebrac wiadomosc\n"
+        //<<"6-Wysylac wiadomosci 7-Odbierac wiadomosci";
         std::cout<<"Wybor>";
         std::cin>>wyb;
 
@@ -464,6 +598,10 @@ int main( int argc, char** argv)
         if(wyb=='4')
             wysylanieWiadomosci(nrPortu,dcbParamSzereg, timeouts);
         if(wyb=='5')
+            nasluchujWiadomosci(nrPortu,dcbParamSzereg, timeouts);
+        if(wyb=='6')
+            wysylanieWiadomosci(nrPortu,dcbParamSzereg, timeouts);
+        if(wyb=='7')
             nasluchujWiadomosci(nrPortu,dcbParamSzereg, timeouts);
     }
     return 0;
