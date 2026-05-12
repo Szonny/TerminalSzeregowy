@@ -39,6 +39,34 @@ KONTROLA KOMUNIKACJ NA PORCIE ZNAKOWYM
         Odbiór: Prezentacja odebranych znaków alfanumerycznych w oknie „Odbiór”.
 */
 
+char odwrocZnak(char znak)
+{
+    bool bity[8];
+
+    std::cout<<'\n';
+    int maska = 1;
+    for(int i=0; i<8; i++)
+    {
+        bity[i]=znak & maska;
+        maska=maska<<1;
+    }
+    std::cout<<'\n';
+
+    znak=0;
+    for(int i=0; i<8; i++)
+        znak += (bity[i]<<(7-i));
+
+    return znak;
+}
+
+std::string odwrocZnaki(std::string lancuch)
+{
+    for(int i=0; i< lancuch.length() ;i++ )
+        lancuch[i]=odwrocZnak(lancuch[i]);
+
+    return lancuch;
+}
+
 int zapiszUstawieniaWPliku(std::string plik, DCB param)
 {
     std::ofstream plikWy(PLIK_USTAWIEN_TRANSMISJI);
@@ -98,20 +126,6 @@ int wczytajUstawienia(DCB &param, COMMTIMEOUTS &tim)
     plikT.close();
 
     return 0;
-}
-
-std::string wczytajLinieZPliku(std::string plik, int nrLini)
-{
-    std::ifstream plikW(plik);
-    std::string wiadomosc;
-    for(int i=1; i<nrLini; i++)
-    {
-        std::string niewazne;
-        std::getline(plikW,niewazne);
-    }
-    plikW>>wiadomosc;
-    plikW.close();
-    return wiadomosc;
 }
 
 void wyswietlBlad()
@@ -384,7 +398,9 @@ DCB ustawieniaTransmisji(DCB dcbParam)
 
 HANDLE utworzPort(int nrPortu)
 {
-    std::string port = "\\\\.\\COM"+  std::to_string(nrPortu);
+    std::stringstream ss;
+    ss<<nrPortu;
+    std::string port = "\\\\.\\COM"+  ss.str();
     HANDLE hSzeregowy = CreateFile(
                                     port.c_str(),                      // Który port
                                    GENERIC_READ | GENERIC_WRITE, //Do odczytu i zapisu
@@ -412,7 +428,9 @@ void wyswietlDostepnePorty()
     std::cout<<"Dostepne Porty:\n";
     for(int i=0 ; i<=255; i++)
     {
-        std::string port = "\\\\.\\COM"+  std::to_string(i);
+        std::stringstream ss;
+        ss<<i;
+        std::string port = "\\\\.\\COM"+  ss.str();
         HANDLE hSzeregowy = CreateFile(
                                     port.c_str(),                      // Który port
                                    GENERIC_READ | GENERIC_WRITE, //Do odczytu i zapisu
@@ -441,20 +459,25 @@ int ustawNrPortu(int nrPortu)
     return nrPortu;
 }
 
-void wysylanieWiadomosci(int nrPortu, DCB parametry ,COMMTIMEOUTS timeouts)
+int wysylanieWiadomosci(int nrPortu, DCB parametry ,COMMTIMEOUTS timeouts)
 {
     HANDLE hSzeregowy = utworzPort(nrPortu);
     if(!hSzeregowy)
-        return;
+        return 1;
 
     if(!SetCommState(hSzeregowy, &parametry))
     {
         std::cout<<"BLAD: Nie udalo sie ustawic parametrow poru szeregowego.\n";
         wyswietlBlad();
+        return 1;
     }
 
     if(!SetCommTimeouts(hSzeregowy, &timeouts))
+    {
         std::cout<<" \nBLAD: Nie udalo sie ustawic domyslnych limitow czasowych\n";
+        wyswietlBlad();
+        return 1;
+    }
 
     DWORD odczytane=0;
 
@@ -467,19 +490,23 @@ void wysylanieWiadomosci(int nrPortu, DCB parametry ,COMMTIMEOUTS timeouts)
     wiadomosc<<buff;
 
     //Czy cstr ma ta sama dlugosc co str.length? -> znak /0 uwzgledniony?
-    if(!WriteFile(hSzeregowy,wiadomosc.str().c_str(), wiadomosc.str().length(), &odczytane, NULL))     //WriteFile robi zapis
+    //if(!WriteFile(hSzeregowy,(odwrocZnaki(wiadomosc.str())).c_str(), wiadomosc.str().length(), &odczytane, NULL))     //WriteFile robi zapis
+    if(!WriteFile(hSzeregowy,(wiadomosc.str()).c_str(), wiadomosc.str().length(), &odczytane, NULL))     //WriteFile robi zapis
     {
         std::cout<<"BLAD: Nie udalo sie wyslac wiadomosci\n";
         wyswietlBlad();
+        return 1;
     }
     CloseHandle(hSzeregowy);
+
+    return 0;
 }
 
-void nasluchujWiadomosci(int nrPortu, DCB parametry ,COMMTIMEOUTS timeouts)
+int nasluchujWiadomosci(int nrPortu, DCB parametry ,COMMTIMEOUTS timeouts)
 {
     HANDLE hSzeregowy = utworzPort(nrPortu);
     if(!hSzeregowy)
-        return;
+        return 1;
 
     char buff[1000];
     DWORD odczytane=0;
@@ -488,19 +515,35 @@ void nasluchujWiadomosci(int nrPortu, DCB parametry ,COMMTIMEOUTS timeouts)
     {
         std::cout<<"BLAD: Nie udalo sie ustawic parametrow poru szeregowego.\n";
         wyswietlBlad();
+        return 1;
     }
 
     if(!SetCommTimeouts(hSzeregowy, &timeouts))
+    {
         std::cout<<" \nBLAD: Nie udalo sie ustawic domyslnych limitow czasowych\n";
+        wyswietlBlad();
+        return 1;
+    }
 
     if(!ReadFile(hSzeregowy,buff,1000, &odczytane, NULL))     //WriteFile robi zapis
     {
         std::cout<<"BLAD: Nie udalo sie odczytac wiadomosci\n";
+        wyswietlBlad();
+        return 1;
     }
-    std::cout<<"Odczytano wiadomosc: \n";
-    printf(buff);
+    if(odczytane <1)
+        std::cout<<"Przekroczono czas polaczenia\n";
+    else
+    {
+        std::cout<<"Odczytano wiadomosc: \n";
+        std::string odczyt(buff);
+        //printf(odwrocZnaki(odczyt).c_str());
+        printf(odczyt.c_str());
+        std::cout<<"\n";
+    }
 
     CloseHandle(hSzeregowy);
+    return 0;
 }
 
 COMMTIMEOUTS ustawieniaCzasowOczekiwania(COMMTIMEOUTS timeouts)
@@ -549,6 +592,36 @@ COMMTIMEOUTS ustawieniaCzasowOczekiwania(COMMTIMEOUTS timeouts)
     return timeouts;
 }
 
+void wysylanieCiagleWiadomosci(int nrPortu, DCB dcbParamSzereg, COMMTIMEOUTS timeouts)
+{
+    bool wysylamy = true;
+    while(wysylamy)
+    {
+        if(wysylanieWiadomosci(nrPortu, dcbParamSzereg, timeouts))
+            break;
+        std::cout<<"Wysyłamy dalej? (Y/N): ";
+        char wyb;
+        std::cin>>wyb;
+        if (wyb == 'N' || wyb == 'n' || wyb == '0')
+            wysylamy=false;
+    }
+}
+
+void nasluchujCiagleWiadomosci(int nrPortu, DCB dcbParamSzereg, COMMTIMEOUTS timeouts)
+{
+    bool wysylamy = true;
+    while(wysylamy)
+    {
+        if(nasluchujWiadomosci(nrPortu, dcbParamSzereg, timeouts))
+            break;
+        std::cout<<"Nasluchujemy dalej? (Y/N): ";
+        char wyb;
+        std::cin>>wyb;
+        if (wyb == 'N' || wyb == 'n' || wyb == '0')
+            wysylamy=false;
+    }
+}
+
 int main( int argc, char** argv)
 {
     DCB dcbParamSzereg = {0};
@@ -583,7 +656,8 @@ int main( int argc, char** argv)
         char wyb;
         std::cout<<"\nWybierz co chcesz zrobic: \n \t 0-wyjsc z programu 1-Ustawic port 2-Ustawienia transmisji \n \
         3-Ustawienia czasow oczekiwania 4-wyslac wiadomosc 5-odebrac wiadomosc\n"
-        //<<"6-Wysylac wiadomosci 7-Odbierac wiadomosci";
+        <<"6-Wysylac wiadomosci 7-Odbierac wiadomosci\n";
+        std::cout<<"\\********************************\n";
         std::cout<<"Wybor>";
         std::cin>>wyb;
 
@@ -600,9 +674,9 @@ int main( int argc, char** argv)
         if(wyb=='5')
             nasluchujWiadomosci(nrPortu,dcbParamSzereg, timeouts);
         if(wyb=='6')
-            wysylanieWiadomosci(nrPortu,dcbParamSzereg, timeouts);
+            wysylanieCiagleWiadomosci(nrPortu,dcbParamSzereg, timeouts);
         if(wyb=='7')
-            nasluchujWiadomosci(nrPortu,dcbParamSzereg, timeouts);
+            nasluchujCiagleWiadomosci(nrPortu,dcbParamSzereg, timeouts);
     }
     return 0;
 
